@@ -10,12 +10,24 @@
           class="player1-name"
         >
           {{ player1 }}
+          <!-- Add status bar for Player 1 -->
+          <div class="status-bar">
+            <div>Budget: {{ player1Data.budget }}</div>
+            <div>Deposited: {{ player1Data.deposited }}</div>
+            <div>Main City: {{ player1Data.mainCity }}</div>
+          </div>
         </div>
         <div
           :class="{ 'current-player': currentPlayer === 'Player 2' }"
           class="player2-name"
         >
           {{ player2 }}
+          <!-- Add status bar for Player 2 -->
+          <div class="status-bar">
+            <div>Budget: {{ player2Data.budget }}</div>
+            <div>Deposited: {{ player2Data.deposited }}</div>
+            <div>Main City: {{ player2Data.mainCity }}</div>
+          </div>
         </div>
       </div>
       <div class="board-container">
@@ -47,13 +59,24 @@
 </template>
 
 <script>
+import axios from "axios";
+
 export default {
   data() {
     return {
       currentPlayer: "Player 1", // Initialize currentPlayer to "Player 1"
       player1: "",
       player2: "",
-
+      player1Data: {
+        budget: 1000,
+        deposited: 500,
+        mainCity: [],
+      },
+      player2Data: {
+        budget: 1200,
+        deposited: 600,
+        mainCity: [],
+      },
       timer: 30,
       timerInterval: null,
     };
@@ -63,8 +86,65 @@ export default {
     this.player1 = this.$route.query.player1 || "Player 1";
     this.player2 = this.$route.query.player2 || "Player 2";
     this.startTimer();
+
+    const callApi = async () => {
+      try {
+        // Make a GET request to retrieve continent coordinates
+        const getResponse = await axios.get(
+          "http://localhost:5070/RandomContinent"
+        );
+
+        // Handle the GET response
+        this.player1Data.mainCity = getResponse.data.player1Coordinates;
+        this.player2Data.mainCity = getResponse.data.player2Coordinates;
+
+        // Call the changeColorStr method to mark the board with continent coordinates
+        this.changeColorStr(
+          this.player1Data.mainCity[1],
+          this.player1Data.mainCity[0]
+        );
+        this.endTurn();
+        this.changeColorStr(
+          this.player2Data.mainCity[1],
+          this.player2Data.mainCity[0]
+        );
+        this.endTurn();
+
+        console.log("GET request successful:", getResponse.data);
+
+        // Prepare the POST request body with dynamic player names and coordinates
+        const postRequestBody = {
+          player1: this.player1,
+          player1Continent: this.player1Data.mainCity,
+          player2: this.player2,
+          player2Continent: this.player2Data.mainCity,
+        };
+
+        // Make a POST request to send continent coordinates
+        const postResponse = await axios.post(
+          "http://localhost:5070/RandomContinent",
+          postRequestBody
+        );
+
+        // Handle the POST response if needed
+        console.log("POST request successful:", postResponse.data);
+      } catch (error) {
+        // Handle errors
+        console.error("Error:", error);
+      }
+    };
+
+    callApi();
   },
   methods: {
+    async playGame() {
+      try {
+        const response = await axios.get(
+          "http://localhost:5070/RandomContinent"
+        );
+        return response;
+      } catch {}
+    },
     startTimer() {
       this.timerInterval = setInterval(() => {
         if (this.timer > 0) {
@@ -95,6 +175,25 @@ export default {
         }
       }
     },
+    changeColorStr(rowIndex, cellIndex) {
+      console.log(`Box clicked: (${rowIndex}, ${cellIndex})`);
+      const cell = document.querySelector(
+        `.board-row:nth-child(${rowIndex + 1}) .board-cell:nth-child(${
+          cellIndex + 1
+        })`
+      );
+      if (cell) {
+        if (this.currentPlayer === "Player 1") {
+          // Check if it's player 1's turn
+          cell.style.backgroundColor = "red";
+        } else {
+          cell.style.backgroundColor = "blue";
+        }
+        // Add text inside the marked box
+        cell.innerHTML = "Main";
+        cell.classList.add("marked-box");
+      }
+    },
     endTurn() {
       clearInterval(this.timerInterval);
       // Switch between players
@@ -108,6 +207,12 @@ export default {
 </script>
 
 <style scoped>
+/* Styling for the status bar */
+.status-bar {
+  margin-top: 10px;
+  font-size: 14px;
+}
+
 .title-container {
   text-align: center; /* Center align the content horizontally */
 }
@@ -152,8 +257,8 @@ export default {
 }
 
 .board-cell {
-  width: 4vw; /* Relative width */
-  height: calc(4vw * 1.18); /* Aspect ratio for hexagon */
+  width: 3.5vw; /* Relative width */
+  height: calc(3.5vw * 1.18); /* Aspect ratio for hexagon */
   background-color: #ccc;
   position: relative;
   margin: 0.05vw; /* Relative margin */
@@ -190,5 +295,9 @@ export default {
 .timer {
   text-align: center;
   margin-top: 10px;
+}
+
+.marked-box {
+  font-weight: bold; /* Increase font weight */
 }
 </style>

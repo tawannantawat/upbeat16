@@ -29,11 +29,14 @@
 </template>
 
 <script>
+import axios from "axios";
 export default {
   data() {
     return {
       player1Name: "",
       player2Name: "",
+      player1Capital: [],
+      player2Capital: [],
     };
   },
   methods: {
@@ -53,6 +56,7 @@ export default {
       this.navigateToNewPage();
     },
   },
+  mounted() {},
 };
 </script>
 
