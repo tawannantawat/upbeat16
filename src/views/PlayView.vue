@@ -1,60 +1,91 @@
 <template>
-  <div>
-    <div>
-      <div class="title-container">
-        <h1>Playing Page</h1>
-      </div>
-      <div class="player-names">
-        <div
-          :class="{ 'current-player': currentPlayer === 'Player 1' }"
-          class="player1-name"
-        >
-          {{ player1 }}
-          <!-- Add status bar for Player 1 -->
-          <div class="status-bar">
-            <div>Budget: {{ player1Data.budget }}</div>
-            <div>Deposited: {{ player1Data.deposited }}</div>
-            <div>Main City: {{ player1Data.mainCity }}</div>
+  <div class="container">
+    <div
+      :class="{
+        'custom-cursor': attacking.state,
+        'nm-cursor': !attacking.state,
+      }"
+    >
+      <div>
+        <div class="title-container">
+          <h1 class="game-title">UPBEAT</h1>
+        </div>
+        <div class="player-names">
+          <div>
+            <div class="status1-bar">
+              <div
+                :class="{ 'current-player': currentPlayer === 'Player 1' }"
+                class="player1-name"
+              >
+                {{ player1 }}
+              </div>
+              <div>Budget: {{ player1Data.budget }}</div>
+              <div>
+                Main City:
+                {{ player1Data.mainCity[0] }},{{ player1Data.mainCity[1] }}
+              </div>
+            </div>
+          </div>
+          <div>
+            <div class="status2-bar">
+              <div
+                :class="{ 'current-player': currentPlayer === 'Player 2' }"
+                class="player2-name"
+              >
+                {{ player2 }}
+              </div>
+              <div>Budget: {{ player2Data.budget }}</div>
+              <div>
+                Main City: {{ player2Data.mainCity[0] }},{{
+                  player2Data.mainCity[1]
+                }}
+              </div>
+            </div>
           </div>
         </div>
-        <div
-          :class="{ 'current-player': currentPlayer === 'Player 2' }"
-          class="player2-name"
-        >
-          {{ player2 }}
-          <!-- Add status bar for Player 2 -->
-          <div class="status-bar">
-            <div>Budget: {{ player2Data.budget }}</div>
-            <div>Deposited: {{ player2Data.deposited }}</div>
-            <div>Main City: {{ player2Data.mainCity }}</div>
-          </div>
-        </div>
-      </div>
-      <div class="board-container">
-        <div
-          v-for="(row, rowIndex) in 9"
-          :key="rowIndex"
-          class="board-row"
-          :style="{ marginTop: rowIndex % 2 === 0 ? '-1vw' : '-1vw' }"
-        >
+        <div class="board-container">
           <div
-            v-for="(cell, cellIndex) in 18"
-            :key="cellIndex"
-            class="board-cell"
-            :class="{ 'even-row': rowIndex % 2 === 0 }"
-            @click="changeColor(rowIndex, cellIndex)"
+            v-for="(row, rowIndex) in 9"
+            :key="rowIndex"
+            class="board-row"
+            :style="{ marginTop: rowIndex % 2 === 0 ? '-1vw' : '-1vw' }"
           >
-            <!-- You can customize the content of each cell as needed -->
-            <!-- For now, let's just remove the numbers -->
+            <div
+              v-for="(cell, cellIndex) in 18"
+              :key="cellIndex"
+              class="board-cell"
+              :class="{
+                'even-row': rowIndex % 2 === 0,
+                'hovered-cell': isHovered(rowIndex, cellIndex),
+              }"
+              @click="clickedBox(rowIndex, cellIndex)"
+              @mouseenter="hoverCell(rowIndex, cellIndex)"
+              @mouseleave="unhoverCell"
+            ></div>
           </div>
         </div>
       </div>
+      <div class="button-wrapper">
+        <button class="end-turn-button" @click="endTurn">End Turn</button>
+      </div>
+      <div class="timer">Time left: {{ timer }}</div>
+      <!-- Dropdown menu -->
+      <div
+        v-if="showDropdown"
+        class="dropdown-menu"
+        :style="{
+          top: dropdownPosition.top + 'px',
+          left: dropdownPosition.left + 'px',
+        }"
+      >
+        <select v-model="selectedAction">
+          <option value="attack">Attack</option>
+          <option value="relocate">Relocate</option>
+          <option value="buy">Buy This Region</option>
+        </select>
+        <button @click="executeAction">Confirm</button>
+      </div>
     </div>
-    <!-- Wrap the button in a div for centering -->
-    <div class="button-wrapper">
-      <button class="end-turn-button" @click="endTurn">End Turn</button>
-    </div>
-    <div class="timer">Time left: {{ timer }}</div>
   </div>
 </template>
 
@@ -64,72 +95,62 @@ import axios from "axios";
 export default {
   data() {
     return {
-      currentPlayer: "Player 1", // Initialize currentPlayer to "Player 1"
+      attacking: { city1: [], city2: [], state: false },
+      board: Array.from({ length: 9 }, () =>
+        Array(18).fill({ owner: null, value: null })
+      ),
+      currentPlayer: "Player 1",
       player1: "",
       player2: "",
       player1Data: {
-        budget: 1000,
-        deposited: 500,
+        budget: 0,
+
         mainCity: [],
       },
       player2Data: {
-        budget: 1200,
-        deposited: 600,
+        budget: 0,
+
         mainCity: [],
       },
       timer: 30,
       timerInterval: null,
+      showDropdown: false,
+      dropdownPosition: { top: 0, left: 0 },
+      selectedAction: null,
+      hoveredRowIndex: null,
+      hoveredCellIndex: null,
     };
   },
   mounted() {
-    // Retrieve player names from route query parameters
     this.player1 = this.$route.query.player1 || "Player 1";
     this.player2 = this.$route.query.player2 || "Player 2";
     this.startTimer();
 
     const callApi = async () => {
       try {
-        // Make a GET request to retrieve continent coordinates
         const getResponse = await axios.get(
-          "http://localhost:5070/RandomContinent"
+          "http://localhost:8080/RandomContinent/Get"
         );
+        this.player1 = getResponse.data.player1.name;
+        this.player2 = getResponse.data.player2.name;
+        this.player1Data.mainCity = getResponse.data.player1.continent;
+        this.player2Data.mainCity = getResponse.data.player2.continent;
+        this.player1Data.budget = getResponse.data.player1.money;
+        this.player2Data.budget = getResponse.data.player2.money;
 
-        // Handle the GET response
-        this.player1Data.mainCity = getResponse.data.player1Coordinates;
-        this.player2Data.mainCity = getResponse.data.player2Coordinates;
-
-        // Call the changeColorStr method to mark the board with continent coordinates
         this.changeColorStr(
           this.player1Data.mainCity[1],
           this.player1Data.mainCity[0]
         );
-        this.endTurn();
+        this.endTurnStr();
         this.changeColorStr(
           this.player2Data.mainCity[1],
           this.player2Data.mainCity[0]
         );
-        this.endTurn();
+        this.endTurnStr();
 
         console.log("GET request successful:", getResponse.data);
-
-        // Prepare the POST request body with dynamic player names and coordinates
-        const postRequestBody = {
-          player1: this.player1,
-          player1Continent: this.player1Data.mainCity,
-          player2: this.player2,
-          player2Continent: this.player2Data.mainCity,
-        };
-
-        // Make a POST request to send continent coordinates
-        const postResponse = await axios.post(
-          "http://localhost:5070/RandomContinent",
-          postRequestBody
-        );
-
-        // Handle the POST response if needed
-        console.log("POST request successful:", postResponse.data);
       } catch (error) {
-        // Handle errors
         console.error("Error:", error);
       }
     };
@@ -137,14 +158,6 @@ export default {
     callApi();
   },
   methods: {
-    async playGame() {
-      try {
-        const response = await axios.get(
-          "http://localhost:5070/RandomContinent"
-        );
-        return response;
-      } catch {}
-    },
     startTimer() {
       this.timerInterval = setInterval(() => {
         if (this.timer > 0) {
@@ -156,27 +169,237 @@ export default {
     },
     resetTimer() {
       clearInterval(this.timerInterval);
-      this.timer = 30;
+      this.timer = 3000;
       this.startTimer();
     },
-    changeColor(rowIndex, cellIndex) {
-      console.log(`Box clicked: (${rowIndex}, ${cellIndex})`);
-      const cell = document.querySelector(
-        `.board-row:nth-child(${rowIndex + 1}) .board-cell:nth-child(${
-          cellIndex + 1
-        })`
-      );
-      if (cell) {
-        if (this.currentPlayer === "Player 1") {
-          // Check if it's player 1's turn
-          cell.style.backgroundColor = "red";
-        } else {
-          cell.style.backgroundColor = "blue";
+    clickedBox(rowIndex, cellIndex) {
+      if (this.attacking.state == true) {
+        const cell = [cellIndex, rowIndex];
+        this.attacking.city2 = cell;
+        console.log(this.currentPlayer);
+        const payload = {
+          myRegion: this.attacking.city1,
+          attackRegion: this.attacking.city2,
+        };
+        axios
+          .post(
+            `http://localhost:8080/RandomContinent/AttackRegion?player=${this.currentPlayer}`,
+            payload
+          )
+          .then((res) => {
+            if (res.status == 200) {
+              if (this.currentPlayer === "Player 1") {
+                var size = res.data.length;
+                const cellElement = document.querySelector(
+                  `.board-row:nth-child(${
+                    res.data[size - 1].coordinates[1] + 1
+                  }) .board-cell:nth-child(${
+                    res.data[size - 1].coordinates[0] + 1
+                  })`
+                );
+                if (cellElement) {
+                  cellElement.style.backgroundColor = "#ffc0cb"; // Pink pastel
+                  cellElement.innerHTML = res.data[size - 1].power;
+                }
+                alert("Attack Success!!!!!!!!!!");
+                console.log(this.player2Data.mainCity);
+                console.log(res.data[size - 1].coordinates);
+                if (
+                  res.data[size - 1].coordinates.toString() ==
+                  this.player2Data.mainCity.toString()
+                ) {
+                  alert("Victory!!!!!!");
+                  this.setWinner();
+                  this.$router.push("/end");
+                }
+              }
+              if (this.currentPlayer === "Player 2") {
+                var size = res.data.length;
+                const cellElement = document.querySelector(
+                  `.board-row:nth-child(${
+                    res.data[size - 1].coordinates[1] + 1
+                  }) .board-cell:nth-child(${
+                    res.data[size - 1].coordinates[0] + 1
+                  })`
+                );
+                if (cellElement) {
+                  cellElement.style.backgroundColor = "#82aeff"; // Blue pastel
+                  cellElement.innerHTML = res.data[size - 1].power;
+                }
+                alert("Attack Success!!!!!!!!!!");
+                if (
+                  res.data[size - 1].coordinates.toString() ==
+                  this.player1Data.mainCity.toString()
+                ) {
+                  alert("Victory!!!!!!");
+                  this.setWinner();
+                  this.$router.push("/end");
+                }
+              }
+            }
+            console.log(res);
+          })
+          .catch((e) => {
+            console.log(e);
+            alert(e.response.data);
+          });
+        console.log();
+        console.log(`${this.attacking.city1} vs ${this.attacking.city2}`);
+        this.attacking.state = false;
+        this.attacking.city1 = [];
+        this.attacking.city2 = [];
+      } else {
+        console.log(`Box clicked: ( ${cellIndex},${rowIndex})`);
+        // Store selected cell's row and column index
+        this.selectedCell = { row: rowIndex, col: cellIndex };
+        // Show dropdown menu on cell click
+        this.showDropdown = true;
+        // Calculate dropdown position based on cell clicked
+        const cell = document.querySelector(
+          `.board-row:nth-child(${rowIndex + 1}) .board-cell:nth-child(${
+            cellIndex + 1
+          })`
+        );
+        if (cell) {
+          const rect = cell.getBoundingClientRect();
+          this.dropdownPosition = {
+            top: rect.bottom + window.scrollY,
+            left: rect.left + window.scrollX,
+          };
         }
       }
     },
+    executeAction() {
+      // Perform action based on selected option
+
+      if (this.selectedAction === "attack") {
+        // Logic for attack action
+        const rowIndex = this.selectedCell.row;
+        const cellIndex = this.selectedCell.col;
+        const cell = [cellIndex, rowIndex];
+
+        this.attacking.city1 = cell;
+        this.attacking.state = true;
+
+        console.log("Attack action performed");
+      } else if (this.selectedAction === "relocate") {
+        const rowIndex = this.selectedCell.row;
+        const cellIndex = this.selectedCell.col;
+        const cell = this.board[rowIndex][cellIndex];
+        // Remove color and text from old main city
+        if (this.currentPlayer === "Player 1") {
+          const [oldRow, oldCol] = this.player1Data.mainCity;
+          const oldCellElement = document.querySelector(
+            `.board-row:nth-child(${oldRow + 1}) .board-cell:nth-child(${
+              oldCol + 1
+            })`
+          );
+          if (oldCellElement) {
+            oldCellElement.style.backgroundColor = "#ccc"; // Reset to default color
+            oldCellElement.innerHTML = "";
+            oldCellElement.classList.remove("marked-box");
+          }
+          // Move main city to the selected cell
+          this.player1Data.mainCity = [rowIndex, cellIndex];
+        } else {
+          const [oldRow, oldCol] = this.player2Data.mainCity;
+          const oldCellElement = document.querySelector(
+            `.board-row:nth-child(${oldRow + 1}) .board-cell:nth-child(${
+              oldCol + 1
+            })`
+          );
+          if (oldCellElement) {
+            oldCellElement.style.backgroundColor = "#ccc"; // Reset to default color
+            oldCellElement.innerHTML = "";
+            oldCellElement.classList.remove("marked-box");
+          }
+          // Move main city to the selected cell
+          this.player2Data.mainCity = [rowIndex, cellIndex];
+        }
+        // Change cell background color to indicate main city
+        const cellElement = document.querySelector(
+          `.board-row:nth-child(${rowIndex + 1}) .board-cell:nth-child(${
+            cellIndex + 1
+          })`
+        );
+        if (cellElement) {
+          cellElement.style.backgroundColor =
+            this.currentPlayer === "Player 1" ? "red" : "blue";
+          cellElement.innerHTML = "Main";
+          cellElement.classList.add("marked-box");
+        }
+        console.log("Relocate action performed");
+      } else if (this.selectedAction === "buy") {
+        const rowIndex = this.selectedCell.row;
+        const cellIndex = this.selectedCell.col;
+        const cell = [cellIndex, rowIndex];
+        var numberRegex = /\s(\d+)/;
+
+        console.log(
+          this[`player${this.currentPlayer.match(numberRegex)[1]}Data`]
+            .mainCity,
+          "Unnee"
+        );
+        console.log(this.currentPlayer);
+
+        const value = prompt(
+          "Enter value for the region (e.g., population, resources):"
+        );
+        axios
+          .post(
+            `http://localhost:8080/RandomContinent/BuyRegion?player=${this.currentPlayer}&budget=${value}&coordinate=${cell}`
+          )
+          .then((res) => {
+            if (res.status == 200) {
+              if (this.currentPlayer === "Player 1") {
+                var size = res.data.myCoordinates.length;
+                const cellElement = document.querySelector(
+                  `.board-row:nth-child(${
+                    res.data.myCoordinates[size - 1].coordinates[1] + 1
+                  }) .board-cell:nth-child(${
+                    res.data.myCoordinates[size - 1].coordinates[0] + 1
+                  })`
+                );
+                if (cellElement) {
+                  cellElement.style.backgroundColor = "#ffc0cb"; // Pink pastel
+                  cellElement.innerHTML =
+                    res.data.myCoordinates[size - 1].power;
+                }
+              }
+              if (this.currentPlayer === "Player 2") {
+                var size = res.data.myCoordinates.length;
+                const cellElement = document.querySelector(
+                  `.board-row:nth-child(${
+                    res.data.myCoordinates[size - 1].coordinates[1] + 1
+                  }) .board-cell:nth-child(${
+                    res.data.myCoordinates[size - 1].coordinates[0] + 1
+                  })`
+                );
+                if (cellElement) {
+                  cellElement.style.backgroundColor = "#82aeff"; // Blue pastel
+                  cellElement.innerHTML =
+                    res.data.myCoordinates[size - 1].power;
+                }
+              }
+              console.log(res);
+              this[
+                `player${this.currentPlayer.match(numberRegex)[1]}Data`
+              ].budget = res.data.money;
+            }
+          })
+          .catch((e) => {
+            console.log(e);
+            alert(e.response.data);
+          });
+
+        console.log("Buy action performed");
+      }
+      // Hide dropdown after action executed
+      this.showDropdown = false;
+    },
+
     changeColorStr(rowIndex, cellIndex) {
-      console.log(`Box clicked: (${rowIndex}, ${cellIndex})`);
+      console.log(`Box clicked: (${rowIndex},${cellIndex})`);
       const cell = document.querySelector(
         `.board-row:nth-child(${rowIndex + 1}) .board-cell:nth-child(${
           cellIndex + 1
@@ -184,38 +407,85 @@ export default {
       );
       if (cell) {
         if (this.currentPlayer === "Player 1") {
-          // Check if it's player 1's turn
           cell.style.backgroundColor = "red";
         } else {
           cell.style.backgroundColor = "blue";
         }
-        // Add text inside the marked box
         cell.innerHTML = "Main";
         cell.classList.add("marked-box");
       }
     },
-    endTurn() {
+    endTurnStr() {
       clearInterval(this.timerInterval);
-      // Switch between players
       this.currentPlayer =
         this.currentPlayer === "Player 1" ? "Player 2" : "Player 1";
-      // Reset timer
+
       this.resetTimer();
+    },
+    endTurn() {
+      clearInterval(this.timerInterval);
+      this.currentPlayer =
+        this.currentPlayer === "Player 1" ? "Player 2" : "Player 1";
+      console.log(this.currentPlayer);
+      axios
+        .post(
+          `http://localhost:8080/RandomContinent/AddInterest?player=${this.currentPlayer}`
+        )
+        .then((res) => {
+          var numberRegex = /\s(\d+)/;
+          this[`player${this.currentPlayer.match(numberRegex)[1]}Data`].budget =
+            res.data;
+        });
+      this.resetTimer();
+    },
+    hoverCell(rowIndex, cellIndex) {
+      this.hoveredRowIndex = rowIndex;
+      this.hoveredCellIndex = cellIndex;
+    },
+    unhoverCell() {
+      this.hoveredRowIndex = null;
+      this.hoveredCellIndex = null;
+    },
+    isHovered(rowIndex, cellIndex) {
+      return (
+        rowIndex === this.hoveredRowIndex && cellIndex === this.hoveredCellIndex
+      );
+    },
+    setWinner() {
+      if (this.currentPlayer == "Player 1") {
+        localStorage.setItem("Winner", this.player1);
+      } else {
+        localStorage.setItem("Winner", this.player2);
+      }
     },
   },
 };
 </script>
 
 <style scoped>
-/* Styling for the status bar */
-.status-bar {
+.container {
+  background-image: url("../assets/playBg.jpg");
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+.status1-bar {
   margin-top: 10px;
   font-size: 14px;
+  background-color: #ffc0cb;
+}
+
+.status2-bar {
+  margin-top: 10px;
+  font-size: 14px;
+  background-color: #82aeff;
 }
 
 .title-container {
-  text-align: center; /* Center align the content horizontally */
+  text-align: center;
 }
+
 .player-names {
   display: flex;
   justify-content: space-between;
@@ -247,8 +517,8 @@ export default {
 .board-container {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center; /* Center the grid horizontally */
-  align-items: center; /* Center the grid vertically */
+  justify-content: center;
+  align-items: center;
   margin-top: 20px;
 }
 
@@ -257,11 +527,11 @@ export default {
 }
 
 .board-cell {
-  width: 3.5vw; /* Relative width */
-  height: calc(3.5vw * 1.18); /* Aspect ratio for hexagon */
+  width: 3.5vw;
+  height: calc(3.5vw * 1.18);
   background-color: #ccc;
   position: relative;
-  margin: 0.05vw; /* Relative margin */
+  margin: 0.05vw;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -269,7 +539,7 @@ export default {
 }
 
 .even-row {
-  transform: translateX(50%); /* Adjust horizontal positioning */
+  transform: translateX(50%);
 }
 
 .button-wrapper {
@@ -295,9 +565,35 @@ export default {
 .timer {
   text-align: center;
   margin-top: 10px;
+  color: white;
 }
 
 .marked-box {
-  font-weight: bold; /* Increase font weight */
+  font-weight: bold;
+  -webkit-text-stroke-color: white;
+  -webkit-text-stroke-width: 0.1px;
+}
+
+.dropdown-menu {
+  position: absolute;
+  background-color: #fff;
+  border: 1px solid #ccc;
+  padding: 2px;
+}
+
+.dropdown-menu select {
+  margin-right: 10px;
+}
+.board-cell:hover {
+  transform: scale(1.05); /* Scale the cell to 110% when hovered over */
+  transition: transform 0.3s ease; /* Smooth transition effect */
+  background-color: #a1a1a1;
+}
+
+.custom-cursor {
+  cursor: url("../assets/sword.png"), auto;
+}
+.nm-cursor {
+  cursor: url("../assets/wr.png"), auto;
 }
 </style>

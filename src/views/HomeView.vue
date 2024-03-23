@@ -22,7 +22,7 @@
         src="../assets/startButton.png"
         alt="Button Image"
         class="button-image"
-        @click="navigateToNewPage"
+        @click="setPlayerNames"
       />
     </div>
   </div>
@@ -35,8 +35,6 @@ export default {
     return {
       player1Name: "",
       player2Name: "",
-      player1Capital: [],
-      player2Capital: [],
     };
   },
   methods: {
@@ -44,7 +42,10 @@ export default {
       // Use Vue Router's programmatic navigation to navigate to another page
       this.$router.push({
         path: "/play",
-        query: { player1: this.player1Name, player2: this.player2Name },
+        query: {
+          player1: this.player1Name,
+          player2: this.player2Name,
+        },
       }); // Change '/new-page' to the path of your desired page
     },
     setPlayerNames() {
@@ -53,7 +54,31 @@ export default {
       // Then proceed to navigate
       localStorage.setItem("player1Name", this.player1Name);
       localStorage.setItem("player2Name", this.player2Name);
-      this.navigateToNewPage();
+      const callApi = async () => {
+        console.log("working");
+        try {
+          const postRequestBody = {
+            player1: this.player1Name,
+            player2: this.player2Name,
+          };
+
+          const postResponse = await axios
+            .post(
+              "http://localhost:8080/RandomContinent/CreatePlayer",
+              postRequestBody
+            )
+            .then((res) => {
+              console.log(res);
+              if (res.status == 200) {
+                this.navigateToNewPage();
+              }
+            });
+        } catch (error) {
+          // Handle errors
+          console.error("Error:", error);
+        }
+      };
+      callApi();
     },
   },
   mounted() {},
